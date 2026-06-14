@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 运行监控看板</title>
+<style>
+  :root {
+    --bg: #0f1923;
+    --card: #182530;
+    --border: #1e3343;
+    --text: #e0e6ed;
+    --text-dim: #7a8a9a;
+    --primary: #00bcd4;
+    --success: #00e676;
+    --danger: #ff5252;
+    --warning: #ffd740;
+    --running: #00bcd4;
+    --completed: #00e676;
+    --failed: #ff5252;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 20px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .header h1 .badge {
+    font-size: 12px;
+    background: var(--primary);
+    color: #000;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 13px;
+  }
+
+  .conn-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--danger);
+    transition: background 0.3s;
+  }
+
+  .conn-dot.connected { background: var(--success); }
+
+  .clear-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .clear-btn:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    text-align: center;
+  }
+
+  .stat-card .number {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .stat-card .label {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .stat-card.total .number { color: var(--text); }
+  .stat-card.running .number { color: var(--running); }
+  .stat-card.completed .number { color: var(--completed); }
+  .stat-card.failed .number { color: var(--failed); }
+
+  /* Main layout: agents grid + timeline */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+  }
+
+  /* Agents grid */
+  .agents-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    min-height: 400px;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .section-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .section-header .count {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+  }
+
+  .agent-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .agent-card.highlight {
+    animation: glow 1.5s ease-out;
+  }
+
+  @keyframes glow {
+    0% { box-shadow: 0 0 20px rgba(0,188,212,0.3); }
+    100% { box-shadow: none; }
+  }
+
+  .agent-card.status-completed {
+    opacity: 0.7;
+  }
+
+  .agent-card.status-completed:hover {
+    opacity: 1;
+  }
+
+  .agent-card.status-failed {
+    border-color: var(--danger);
+    background: rgba(255,82,82,0.05);
+  }
+
+  .agent-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+
+  .agent-name {
+    font-weight: 600;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .agent-type-badge {
+    font-size: 10px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.08);
+    color: var(--text-dim);
+    font-weight: 400;
+  }
+
+  .status-tag {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .status-tag.running { background: rgba(0,188,212,0.15); color: var(--running); }
+  .status-tag.completed { background: rgba(0,230,118,0.15); color: var(--completed); }
+  .status-tag.failed { background: rgba(255,82,82,0.15); color: var(--failed); }
+
+  .agent-stage {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .progress-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease, background 0.3s;
+    background: var(--primary);
+  }
+
+  .progress-fill.completed { background: var(--success); }
+  .progress-fill.failed { background: var(--danger); }
+
+  .agent-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .agent-id {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    opacity: 0.6;
+  }
+
+  .parent-link {
+    font-size: 11px;
+    color: var(--primary);
+    opacity: 0.8;
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+
+  .empty-state .icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.4;
+  }
+
+  .empty-state h3 {
+    font-size: 16px;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .empty-state p {
+    font-size: 13px;
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.6;
+  }
+
+  .empty-state code {
+    background: rgba(255,255,255,0.06);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  /* Timeline */
+  .timeline-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .timeline-list {
+    flex: 1;
+    overflow-y: auto;
+    margin-top: 12px;
+  }
+
+  .timeline-list::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .timeline-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .timeline-list::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+  }
+
+  .timeline-entry {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .timeline-time {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    min-width: 60px;
+    padding-top: 1px;
+  }
+
+  .timeline-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+
+  .timeline-dot.start,
+  .timeline-dot.running { background: var(--running); }
+
+  .timeline-dot.end,
+  .timeline-dot.completed { background: var(--completed); }
+
+  .timeline-dot.fail,
+  .timeline-dot.failed { background: var(--failed); }
+
+  .timeline-dot.update { background: var(--warning); }
+
+  .timeline-content {
+    flex: 1;
+  }
+
+  .timeline-content .msg {
+    font-size: 13px;
+  }
+
+  .timeline-content .detail {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .main-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .stats-bar {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 500px) {
+    .header {
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .agents-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .stats-bar {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Demo controls */
+  .demo-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: rgba(255,215,64,0.05);
+    border: 1px solid rgba(255,215,64,0.2);
+    border-radius: 8px;
+    align-items: center;
+  }
+
+  .demo-bar .title {
+    font-size: 12px;
+    color: var(--warning);
+    font-weight: 500;
+    margin-right: 8px;
+  }
+
+  .demo-btn {
+    background: var(--border);
+    border: none;
+    color: var(--text);
+    padding: 5px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+
+  .demo-btn:hover {
+    background: var(--primary);
+    color: #000;
+  }
+
+  .demo-btn.danger {
+    color: var(--danger);
+  }
+
+  .demo-btn.danger:hover {
+    background: var(--danger);
+    color: #fff;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>
+      🎯 Agent 运行监控
+      <span class="badge">实时</span>
+    </h1>
+    <div class="header-right">
+      <span class="conn-status">
+        <span class="conn-dot" id="connDot"></span>
+        <span id="connText">未连接</span>
+      </span>
+      <button class="clear-btn" onclick="clearAll()">🗑 清空</button>
+    </div>
+  </div>
+
+  <!-- Demo Bar -->
+  <div class="demo-bar">
+    <span class="title">🧪 模拟数据</span>
+    <button class="demo-btn" onclick="demoSimulate()">▶ 模拟一次并行任务</button>
+    <button class="demo-btn" onclick="demoRandom()">🎲 随机触发</button>
+    <button class="demo-btn danger" onclick="demoError()">⚠ 模拟错误</button>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stat-card total">
+      <div class="number" id="statTotal">0</div>
+      <div class="label">总 Agent 数</div>
+    </div>
+    <div class="stat-card running">
+      <div class="number" id="statRunning">0</div>
+      <div class="label">运行中</div>
+    </div>
+    <div class="stat-card completed">
+      <div class="number" id="statCompleted">0</div>
+      <div class="label">已完成</div>
+    </div>
+    <div class="stat-card failed">
+      <div class="number" id="statFailed">0</div>
+      <div class="label">失败</div>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="main-grid">
+    <!-- Agents -->
+    <div class="agents-section">
+      <div class="section-header">
+        <h2>🤖 Agent 列表</h2>
+        <span class="count" id="agentCount">0 个</span>
+      </div>
+      <div class="agents-grid" id="agentsGrid"></div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline-section">
+      <div class="section-header">
+        <h2>⏱ 时间线</h2>
+        <span class="count" id="logCount">0 条</span>
+      </div>
+      <div class="timeline-list" id="timelineList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ========== SSE 连接 ==========
+const BASE = window.location.origin;
+const connDot = document.getElementById('connDot');
+const connText = document.getElementById('connText');
+
+let eventSource = null;
+
+function connectSSE() {
+  if (eventSource) {
+    eventSource.close();
+  }
+
+  eventSource = new EventSource(`${BASE}/api/events`);
+
+  eventSource.onopen = () => {
+    connDot.className = 'conn-dot connected';
+    connText.textContent = '已连接';
+  };
+
+  eventSource.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      handleEvent(data);
+    } catch (err) {
+      console.error('SSE parse error:', err);
+    }
+  };
+
+  eventSource.onerror = () => {
+    connDot.className = 'conn-dot';
+    connText.textContent = '未连接，5秒后重试...';
+    setTimeout(connectSSE, 5000);
+  };
+}
+
+// ========== 实时计时器（每1秒更新运行中的agent耗时，原地更新DOM不重绘） ==========
+function startDurationTimer() {
+  setInterval(() => {
+    const now = Date.now();
+    let needsRender = false;
+
+    for (const a of state.agents.values()) {
+      if (a.status === 'running' && a.startTime) {
+        const elapsed = Math.floor((now - a.startTime) / 1000);
+        const formatted = formatDuration(elapsed);
+        if (a.duration !== formatted) {
+          a.duration = formatted;
+          needsRender = true;
+        }
+      }
+    }
+
+    if (needsRender) {
+      // 只更新 duration 显示，不重建整个网格
+      document.querySelectorAll('.agent-duration').forEach(el => {
+        const status = el.dataset.status;
+        const start = parseInt(el.dataset.start);
+        if (status === 'running' && start) {
+          const secs = Math.floor((Date.now() - start) / 1000);
+          el.textContent = '⏱ ' + formatDuration(secs);
+        }
+      });
+    }
+  }, 1000);
+}
+
+// ========== 格式化时长 ==========
+function formatDuration(seconds) {
+  if (seconds < 60) return seconds + 's';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m < 60) return m + 'm ' + s + 's';
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return h + 'h ' + mm + 'm ' + s + 's';
+}
+
+// ========== 状态管理 ==========
+const state = {
+  agents: new Map(),
+  logs: [],
+  stats: { total: 0, running: 0, completed: 0, failed: 0 }
+};
+
+function handleEvent(data) {
+  switch (data.type) {
+    case 'init':
+      data.agents.forEach(a => state.agents.set(a.id, a));
+      data.log.forEach(l => state.logs.push(l));
+      state.stats = data.stats;
+      renderAll();
+      break;
+
+    case 'agent_update':
+      state.agents.set(data.agent.id, data.agent);
+      updateStats();
+      renderAgents();
+      renderHeaderStats();
+      break;
+
+    case 'agent_removed':
+      state.agents.delete(data.id);
+      updateStats();
+      renderAgents();
+      renderHeaderStats();
+      break;
+
+    case 'log':
+      state.logs.push(data.entry);
+      renderTimeline();
+      updateLogCount();
+      break;
+  }
+}
+
+function updateStats() {
+  let running = 0, completed = 0, failed = 0;
+  for (const a of state.agents.values()) {
+    if (a.status === 'running') running++;
+    else if (a.status === 'completed') completed++;
+    else if (a.status === 'failed') failed++;
+  }
+  state.stats = { total: state.agents.size, running, completed, failed };
+}
+
+// ========== 渲染 ==========
+function renderAll() {
+  renderHeaderStats();
+  renderAgents();
+  renderTimeline();
+  updateLogCount();
+}
+
+function renderHeaderStats() {
+  document.getElementById('statTotal').textContent = state.stats.total;
+  document.getElementById('statRunning').textContent = state.stats.running;
+  document.getElementById('statCompleted').textContent = state.stats.completed;
+  document.getElementById('statFailed').textContent = state.stats.failed;
+  document.getElementById('agentCount').textContent = state.stats.total + ' 个';
+}
+
+function renderAgents() {
+  const grid = document.getElementById('agentsGrid');
+  const list = Array.from(state.agents.values());
+
+  if (list.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="icon">📡</div>
+        <h3>暂无 Agent 活动</h3>
+        <p>通过 API 上报 agent 状态，或点击下方的
+          <code>模拟一次并行任务</code> 按钮测试看板效果</p>
+      </div>
+    `;
+    return;
+  }
+
+  // 排序：运行中 > 刚完成 > 按启动时间倒序
+  list.sort((a, b) => {
+    if (a.status === 'running' && b.status !== 'running') return -1;
+    if (a.status !== 'running' && b.status === 'running') return 1;
+    return b.startTime - a.startTime;
+  });
+
+  grid.innerHTML = list.map(a => `
+    <div class="agent-card status-${a.status}" data-id="${a.id}">
+      <div class="agent-card-header">
+        <div class="agent-name">
+          ${a.type === 'main' ? '🧠' : '🔧'} ${escapeHtml(a.name)}
+          <span class="agent-type-badge">${a.type}</span>
+        </div>
+        <span class="status-tag ${a.status}">
+          ${statusLabel(a.status)}
+        </span>
+      </div>
+      <div class="agent-stage">📌 ${escapeHtml(a.stage)}</div>
+      <div class="progress-bar">
+        <div class="progress-fill ${a.status}" style="width:${a.progress}%"></div>
+      </div>
+      <div class="agent-meta">
+        <span class="agent-duration" data-status="${a.status}" data-start="${a.startTime}" data-end="${a.endTime || ''}">⏱ ${a.duration}</span>
+        ${a.parentId ? `<span class="parent-link">⬆ 子 agent</span>` : '<span>📌 主 agent</span>'}
+      </div>
+      ${a.error ? `<div style="color:var(--danger);font-size:11px;margin-top:4px">❌ ${escapeHtml(a.error)}</div>` : ''}
+      <div class="agent-id">${a.id}</div>
+    </div>
+  `).join('');
+}
+
+function renderTimeline() {
+  const list = document.getElementById('timelineList');
+  const entries = state.logs.slice(-100).reverse();
+
+  list.innerHTML = entries.map(e => `
+    <div class="timeline-entry">
+      <div class="timeline-time">${e.time}</div>
+      <div class="timeline-dot ${e.eventType}"></div>
+      <div class="timeline-content">
+        <div class="msg">${escapeHtml(e.detail)}</div>
+        <div class="detail">${e.agentId}</div>
+      </div>
+    </div>
+  `).join('');
+
+  // 自动滚到底部
+  list.scrollTop = 0;
+}
+
+function updateLogCount() {
+  document.getElementById('logCount').textContent = state.logs.length + ' 条';
+}
+
+function statusLabel(status) {
+  const map = { running: '▶ 运行中', completed: '✓ 完成', failed: '✗ 失败' };
+  return map[status] || status;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ========== 操作 ==========
+async function api(path, body) {
+  try {
+    const res = await fetch(BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('API error:', err);
+    return null;
+  }
+}
+
+async function clearAll() {
+  // 客户端清理
+  state.agents.clear();
+  state.logs = [];
+  updateStats();
+  renderAll();
+}
+
+// ========== 模拟数据 ==========
+let demoCounter = 0;
+
+async function demoSimulate() {
+  const batch = ++demoCounter;
+  const tasks = [
+    { name: `代码搜索-${batch}`, type: 'sub', stage: '搜索中...', duration: 2000 },
+    { name: `文件分析-${batch}`, type: 'sub', stage: '分析中...', duration: 3000 },
+    { name: `代码审查-${batch}`, type: 'sub', stage: '审查中...', duration: 4000 },
+  ];
+
+  // 启动主 agent
+  const main = await api('/api/agent/start', {
+    name: `任务批处理 #${batch}`,
+    type: 'main',
+    stage: '调度中'
+  });
+  if (!main) return;
+
+  // 逐步更新主 agent
+  setTimeout(() => api('/api/agent/update', { id: main.agent.id, stage: '分派子任务', progress: 20 }), 300);
+
+  // 启动子 agent
+  const subs = [];
+  for (const t of tasks) {
+    const sub = await api('/api/agent/start', {
+      ...t,
+      parentId: main.agent.id
+    });
+    if (sub) subs.push(sub.agent);
+  }
+
+  // 子 agent 逐步推进
+  subs.forEach((sub, i) => {
+    const t = tasks[i];
+    const steps = [
+      { stage: '初始化环境', progress: 10, delay: 500 },
+      { stage: '加载依赖', progress: 30, delay: t.duration * 0.3 },
+      { stage: '执行中...', progress: 60, delay: t.duration * 0.6 },
+      { stage: '汇总结果', progress: 90, delay: t.duration * 0.9 },
+    ];
+
+    steps.forEach(s => {
+      setTimeout(() => {
+        api('/api/agent/update', { id: sub.id, stage: s.stage, progress: s.progress });
+      }, s.delay);
+    });
+
+    // 完成
+    setTimeout(() => {
+      api('/api/agent/end', { id: sub.id, status: 'completed' });
+    }, t.duration + 200);
+  });
+
+  // 更新主 agent
+  setTimeout(() => api('/api/agent/update', { id: main.agent.id, stage: '等待子任务完成', progress: 50 }), 1000);
+  setTimeout(() => api('/api/agent/update', { id: main.agent.id, stage: '合并结果', progress: 80 }), 3000);
+
+  // 主 agent 完成
+  setTimeout(() => {
+    api('/api/agent/end', { id: main.agent.id, status: 'completed' });
+  }, 4500);
+}
+
+async function demoRandom() {
+  const names = ['数据抓取', '内容解析', '图片处理', '文本分析', 'API调用', '日志分析'];
+  const name = names[Math.floor(Math.random() * names.length)] + '-' + (++demoCounter);
+
+  const agent = await api('/api/agent/start', {
+    name,
+    type: Math.random() > 0.7 ? 'main' : 'sub',
+    stage: '启动中'
+  });
+  if (!agent) return;
+
+  let progress = 0;
+  const interval = setInterval(async () => {
+    progress += Math.floor(Math.random() * 20) + 5;
+    if (progress >= 100) {
+      clearInterval(interval);
+      await api('/api/agent/end', { id: agent.agent.id, status: 'completed' });
+    } else {
+      await api('/api/agent/update', {
+        id: agent.agent.id,
+        stage: ['处理中...', '分析数据', '生成结果', '优化输出'][Math.floor(Math.random() * 4)],
+        progress
+      });
+    }
+  }, 800 + Math.random() * 1200);
+}
+
+async function demoError() {
+  const agent = await api('/api/agent/start', {
+    name: `失败任务-${++demoCounter}`,
+    type: 'sub',
+    stage: '执行中'
+  });
+  if (!agent) return;
+
+  setTimeout(async () => {
+    await api('/api/agent/update', { id: agent.agent.id, stage: '遇到错误', progress: 65 });
+  }, 1000);
+
+  setTimeout(async () => {
+    await api('/api/agent/end', {
+      id: agent.agent.id,
+      status: 'failed',
+      error: '连接超时：无法访问目标服务'
+    });
+  }, 2000);
+}
+
+// ========== 启动 ==========
+connectSSE();
+startDurationTimer();
+</script>
+</body>
+</html>", "file_path": "D:\\Desktop\\cherryAi_texty\\控制面板制作\\agent-dashboard\\public\\index.html"}
