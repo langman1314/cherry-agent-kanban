@@ -264,17 +264,6 @@ function getSmartProjectDisplayName(dirName, sessionFilePath) {
 }
 
 /**
- * 从 session 文件的 cwd 字段提取更精确的显示名
- * 例如 "D:\Desktop\cherryAi_texty\分镜" → "分镜"
- */
-function getDisplayNameFromCwd(cwd) {
-  if (!cwd) return null;
-  // 取路径最后一级
-  const parts = cwd.replace(/\\/g, '/').split('/');
-  return parts[parts.length - 1] || null;
-}
-
-/**
  * 读取 session JSONL 文件的第一条用户消息，提取元信息
  */
 function readSessionHeader(filePath) {
