@@ -10,7 +10,7 @@
 #   source /path/to/dashboard-hook.sh end "$AGENT_ID" "completed"
 #   source /path/to/dashboard-hook.sh end "$AGENT_ID" "failed" "连接超时"
 
-DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:3456}"
+DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:3457}"
 DASHBOARD_DEBUG="${DASHBOARD_DEBUG:-false}"
 
 __dash_api() {

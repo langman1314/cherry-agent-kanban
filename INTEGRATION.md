@@ -4,7 +4,7 @@
 
 | 文件 | 用途 |
 |------|------|
-| `server.js` | 看板后端服务 (端口 3456) |
+| `server.js` | 看板后端服务 (端口 3457) |
 | `public/index.html` | 看板前端界面 |
 | `report.js` | **Node.js CLI 状态上报工具** ← 主力工具 |
 | `dashboard-hook.sh` | Bash 封装脚本（备用） |
@@ -16,7 +16,7 @@ cd /d/Desktop/cherryAi_texty/控制面板制作/agent-dashboard
 node server.js
 ```
 
-打开浏览器访问: http://localhost:3456
+打开浏览器访问: http://localhost:3457
 
 ## 🔌 在你的 Agent 代码中集成
 
@@ -108,7 +108,7 @@ server.js (看板后端)
 # 1. 启动看板
 node /d/Desktop/cherryAi_texty/控制面板制作/agent-dashboard/server.js
 
-# 2. 打开浏览器 http://localhost:3456
+# 2. 打开浏览器 http://localhost:3457
 
 # 3. 手动测试上报
 node /d/Desktop/cherryAi_texty/控制面板制作/agent-dashboard/report.js start --name "测试" --type "main" --stage "验证"
